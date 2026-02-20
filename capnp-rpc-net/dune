@@ -2,4 +2,4 @@
  (name capnp_rpc_net)
  (public_name capnp-rpc-net)
  (libraries astring capnp capnp-rpc fmt logs mirage-crypto-rng
-   tls-eio base64 uri ptime prometheus))
+   tls-eio base64 uri ptime))

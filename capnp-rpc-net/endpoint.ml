@@ -1,25 +1,5 @@
 open Eio.Std
 
-module Metrics = struct
-  open Prometheus
-
-  let namespace = "capnp"
-
-  let subsystem = "net"
-
-  let connections =
-    let help = "Number of live capnp-rpc connections" in
-    Gauge.v ~help ~namespace ~subsystem "connections"
-
-  let messages_inbound_received_total =
-    let help = "Total number of messages received" in
-    Counter.v ~help ~namespace ~subsystem "messages_inbound_received_total"
-
-  let messages_outbound_enqueued_total =
-    let help = "Total number of messages enqueued to be transmitted" in
-    Counter.v ~help ~namespace ~subsystem "messages_outbound_enqueued_total"
-end
-
 module Write = Eio.Buf_write
 
 let src = Logs.Src.create "endpoint" ~doc:"Send and receive Cap'n'Proto messages"
@@ -66,13 +46,11 @@ let send t msg =
         (M.total_alloc_size msg)
         (M.num_segments msg));
   Capnp.Codecs.serialize_iter_copyless ~compression msg ~f:(fun x len -> Write.string t.writer x ~len);
-  Prometheus.Counter.inc_one Metrics.messages_outbound_enqueued_total;
   if record_sent_messages then dump_msg (Capnp.Codecs.serialize ~compression msg)
 
 let rec recv ~tags t =
   match Capnp.Codecs.FramedStream.get_next_frame t.decoder with
   | Ok msg ->
-    Prometheus.Counter.inc_one Metrics.messages_inbound_received_total;
     (* We often want to send multiple response messages while processing a batch of requests,
        so pause the writer to collect them. We'll unpause on the next [single_read]. *)
     Write.pause t.writer;
@@ -122,10 +100,8 @@ let rec run_writer ~tags t =
 
 let run_writer ~tags t =
   let cleanup () =
-    Prometheus.Gauge.dec_one Metrics.connections;
     disconnect t            (* The listen fiber will read end-of-stream soon *)
   in
-  Prometheus.Gauge.inc_one Metrics.connections;
   match run_writer ~tags t with
   | () -> cleanup ()
   | exception ex ->
